@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>مغيّر الصوت للمقالب</title>
+<style>
+:root{--bg:#fff;--fg:#1a1a1a;--card:#f3f1f8;--accent:#7b3fe4;--accent-fg:#fff;--muted:#666;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15131c;--fg:#f1eefb;--card:#241f33;--accent:#9a6bff;--accent-fg:#fff;--muted:#a9a3bd}}
+:root[data-theme="dark"]{--bg:#15131c;--fg:#f1eefb;--card:#241f33;--accent:#9a6bff;--accent-fg:#fff;--muted:#a9a3bd}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;padding:20px;max-width:480px;margin-inline:auto}
+h1{font-size:24px;margin:8px 0 4px}
+p.sub{color:var(--muted);margin:0 0 16px;font-size:14px}
+.card{background:var(--card);border-radius:16px;padding:16px;margin-bottom:14px}
+.presets{display:flex;gap:8px;flex-wrap:wrap}
+button{font:inherit;border:0;border-radius:12px;padding:12px 16px;background:var(--bg);color:var(--fg);cursor:pointer}
+button.on{background:var(--accent);color:var(--accent-fg)}
+button.big{width:100%;padding:16px;font-size:18px;background:var(--accent);color:var(--accent-fg);margin-top:6px}
+button.big.live{background:#d93a3a}
+input[type=range]{width:100%;margin:10px 0}
+.note{font-size:13px;color:var(--muted);line-height:1.6}
+#status{font-size:14px;margin-top:8px;min-height:20px}
+</style>
+</head>
+<body>
+<h1>🎭 مغيّر الصوت للمقالب</h1>
+<p class="sub">نسخة تجريبية — اسمع نفسك بصوت تاني</p>
+<div id="status" style="font-weight:bold;padding:10px;background:var(--card);border-radius:12px;margin-bottom:14px">⏳ الكود لسه ما اشتغلش</div>
+
+<div class="card">
+  <b>اختار الصوت</b>
+  <div class="presets" style="margin-top:10px">
+    <button class="on" data-p="6">👩 صوت ست</button>
+    <button data-p="9">👧 بنت صغيرة</button>
+    <button data-p="-5">🧔 رجل تخين</button>
+  </div>
+  <input id="pitch" type="range" min="-12" max="12" step="1" value="6">
+  <div class="note">درجة الصوت: <span id="pv">6</span></div>
+</div>
+
+<div class="card">
+  <b>1) مباشر</b>
+  <div class="note">اتكلم وهتسمع صوتك متغيّر فورًا. <b>لازم سماعة</b> وإلا هيحصل صفير.</div>
+  <button class="big" id="liveBtn">▶ ابدأ المباشر</button>
+</div>
+
+<div class="card">
+  <b>2) سجّل وشغّل</b>
+  <div class="note">سجّل جملة وهتتشغّل بالصوت الجديد. تقدر تبعتها رسالة صوتية.</div>
+  <button class="big" id="recBtn">🎙 ابدأ التسجيل</button>
+</div>
+
+<p class="note">⚠️ للترفيه والمقالب بين الأصحاب بس. ممنوع الانتحال أو النصب على حد.</p>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<script>
+let mic, shifter, recorder, ready=false, live=false, recording=false;
+const $=id=>document.getElementById(id);
+const say=t=>$('status').textContent=t;
+window.onerror=(m)=>{say('❌ '+m)};
+say(typeof Tone==='undefined'?'⚠️ الصفحة اشتغلت بس مكتبة الصوت مش محمّلة':'✅ الصفحة جاهزة');
+
+async function init(){
+  if(ready) return;
+  if(typeof Tone==='undefined') throw new Error('مكتبة الصوت متحملتش (النت؟)');
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia) throw new Error('الصفحة دي مش مسموحلها بالمايك');
+  await Tone.start();
+  mic=new Tone.UserMedia();
+  shifter=new Tone.PitchShift({pitch:+$('pitch').value,windowSize:0.1});
+  recorder=new Tone.Recorder();
+  mic.connect(shifter); shifter.connect(recorder);
+  await Promise.race([mic.open(), new Promise((_,r)=>setTimeout(()=>r(new Error('المايك مفتحش — الإذن اتحجب')),8000))]);
+  ready=true;
+}
+function setPitch(v){
+  $('pitch').value=v; $('pv').textContent=v;
+  if(shifter) shifter.pitch=+v;
+}
+document.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('[data-p]').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); setPitch(b.dataset.p);
+});
+$('pitch').oninput=e=>{
+  document.querySelectorAll('[data-p]').forEach(x=>x.classList.remove('on'));
+  setPitch(e.target.value);
+};
+
+$('liveBtn').onclick=async()=>{
+  say('بيفتح المايك...');
+  try{
+    await init();
+    if(!live){ shifter.connect(Tone.getDestination()); live=true;
+      $('liveBtn').textContent='⏹ وقف المباشر'; $('liveBtn').classList.add('live'); say('بتتكلم دلوقتي... البس السماعة 🎧');
+    } else { shifter.disconnect(Tone.getDestination()); live=false;
+      $('liveBtn').textContent='▶ ابدأ المباشر'; $('liveBtn').classList.remove('live'); say(''); }
+  }catch(e){ say('❌ '+(e.name||'')+' '+(e.message||e)); }
+};
+
+$('recBtn').onclick=async()=>{
+  say('بيفتح المايك...');
+  try{
+    await init();
+    if(!recording){ recorder.start(); recording=true;
+      $('recBtn').textContent='⏹ وقف وشغّل'; $('recBtn').classList.add('live'); say('بيسجّل...');
+    } else {
+      const blob=await recorder.stop(); recording=false;
+      $('recBtn').textContent='🎙 ابدأ التسجيل'; $('recBtn').classList.remove('live');
+      say('شغّال دلوقتي 🔊'); new Audio(URL.createObjectURL(blob)).play();
+    }
+  }catch(e){ say('❌ '+(e.name||'')+' '+(e.message||e)); }
+};
+</script>
+</body>
+</html>
